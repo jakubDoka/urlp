@@ -105,21 +105,31 @@ func (f *field) set(values url.Values) (err error) {
 			return e
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		n, err := strconv.ParseInt(val, 10, 64)
-		if err != nil {
-			return e.Wrap(err)
+		var n int64
+		if val != "" {
+			n, err = strconv.ParseInt(val, 10, 64)
+			if err != nil {
+				return e.Wrap(err)
+			}
 		}
+
 		f.SetInt(n)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		n, err := strconv.ParseUint(val, 10, 64)
-		if err != nil {
-			return e.Wrap(err)
+		var n uint64
+		if val != "" {
+			n, err = strconv.ParseUint(val, 10, 64)
+			if err != nil {
+				return e.Wrap(err)
+			}
 		}
 		f.SetUint(n)
 	case reflect.Float32, reflect.Float64:
-		n, err := strconv.ParseFloat(val, f.StructField.Type.Bits())
-		if err != nil {
-			return e.Wrap(err)
+		var n float64
+		if val != "" {
+			n, err = strconv.ParseFloat(val, f.StructField.Type.Bits())
+			if err != nil {
+				return e.Wrap(err)
+			}
 		}
 		f.SetFloat(n)
 	}
