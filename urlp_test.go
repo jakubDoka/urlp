@@ -7,11 +7,16 @@ import (
 	"github.com/jakubDoka/sterr"
 )
 
-type test struct {
-	A int
+// Inner is part of a unit test, has no purpose other then that
+type Inner struct {
 	B uint
 	C bool
 	E float64
+}
+
+type test struct {
+	A int
+	Inner
 	F string
 	G string `urlp:"g"`
 	H string `urlp:"optional"`
@@ -35,7 +40,7 @@ func TestParse(t *testing.T) {
 				"g": {"string"},
 				"H": {"string"},
 			},
-			res: test{10, 10, true, 10, "string", "string", "string"},
+			res: test{10, Inner{10, true, 10}, "string", "string", "string"},
 		},
 		{
 			desc: "success omit",
@@ -47,7 +52,7 @@ func TestParse(t *testing.T) {
 				"F": {"string"},
 				"g": {"string"},
 			},
-			res: test{10, 10, true, 10, "string", "string", ""},
+			res: test{10, Inner{10, true, 10}, "string", "string", ""},
 		},
 		{
 			desc: "success",
@@ -77,7 +82,7 @@ func TestParse(t *testing.T) {
 				"F": {"string"},
 				"g": {"string"},
 			},
-			res: test{A: 10, B: 10},
+			res: test{A: 10, Inner: Inner{B: 10}},
 			err: ErrParseFail,
 		},
 	}

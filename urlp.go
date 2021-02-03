@@ -9,7 +9,7 @@ import (
 	"github.com/jakubDoka/sterr"
 )
 
-// Errors related to url Parsing
+// errors
 var (
 	ErrNotPtr          = sterr.New("value is not pointer")
 	ErrMissingTagValue = sterr.New("tag(%s) on %s is missing value")
@@ -20,10 +20,24 @@ var (
 )
 
 // Parse takes an url.Values and struct that is fed with them, you can use
-// "optional" tag to make struct field optional or "something" to use custom name
+// "optional" tag to make struct field optional or "something" to use custom name,
+// you can nest struct but all fields will be considered at same level so:
 //
-// `urlp:"name,optional"` this will assing value under "name" to a field and ignore
-// if its missing
+//	type foo {
+//		A, B, C int
+//	}
+//
+// acts same as:
+//
+//	type bar {
+//		A int
+//		B struct {
+//			B, C int
+//		}
+//	}
+//
+// `urlp:"name,optional"` will assing value under "name" key to tagged field and will not raise a
+// error if field is missing
 func Parse(values url.Values, value interface{}) (err error) {
 	ptr := reflect.ValueOf(value)
 	if ptr.Kind() != reflect.Ptr {
@@ -39,6 +53,14 @@ func Parse(values url.Values, value interface{}) (err error) {
 		}
 
 		if !f.CanSet() {
+			continue
+		}
+
+		if f.CanAddr() && f.Kind() == reflect.Struct {
+			err = Parse(values, f.Value.Addr().Interface())
+			if err != nil {
+				return err
+			}
 			continue
 		}
 
