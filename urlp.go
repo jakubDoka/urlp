@@ -20,7 +20,10 @@ var (
 )
 
 // Parse takes an url.Values and struct that is fed with them, you can use
-// "optional" tag to make struct field optional or "name:"something"" to use custom name
+// "optional" tag to make struct field optional or "something" to use custom name
+//
+// `urlp:"name,optional"` this will assing value under "name" to a field and ignore
+// if its missing
 func Parse(values url.Values, value interface{}) (err error) {
 	ptr := reflect.ValueOf(value)
 	if ptr.Kind() != reflect.Ptr {
