@@ -20,7 +20,7 @@ type test struct {
 	Inner
 	F string
 	G string `urlp:"g"`
-	H string `urlp:"optional"`
+	H int    `urlp:"optional"`
 }
 
 func (t *test) cmp(b *test) bool {
@@ -50,12 +50,12 @@ func TestParse(t *testing.T) {
 				"E": {"10"},
 				"F": {"string"},
 				"g": {"string"},
-				"H": {"string"},
+				"H": {"10"},
 			},
-			res: test{10, Inner{10, true, []int{0, 1, 5}, 10}, "string", "string", "string"},
+			res: test{10, Inner{10, true, []int{0, 1, 5}, 10}, "string", "string", 10},
 		},
 		{
-			desc: "success omit",
+			desc: "omit",
 			args: url.Values{
 				"A": {"10"},
 				"B": {"10"},
@@ -65,7 +65,21 @@ func TestParse(t *testing.T) {
 				"F": {"string"},
 				"g": {"string"},
 			},
-			res: test{10, Inner{10, true, []int{0, 1, 5}, 10}, "string", "string", ""},
+			res: test{10, Inner{10, true, []int{0, 1, 5}, 10}, "string", "string", 0},
+		},
+		{
+			desc: "omit with empty string",
+			args: url.Values{
+				"A": {"10"},
+				"B": {"10"},
+				"C": {"true"},
+				"D": {"0", "1", "5"},
+				"E": {"10"},
+				"F": {"string"},
+				"g": {"string"},
+				"h": {""},
+			},
+			res: test{10, Inner{10, true, []int{0, 1, 5}, 10}, "string", "string", 0},
 		},
 		{
 			desc: "missing value",
