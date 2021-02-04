@@ -106,3 +106,54 @@ func TestParse(t *testing.T) {
 		})
 	}
 }
+
+func TestConfiguration(t *testing.T) {
+	testCases := []struct {
+		desc   string
+		parser Parser
+		args   url.Values
+		res    Inner
+	}{
+		{
+			desc:   "none",
+			parser: New(),
+			args: url.Values{
+				"B": {"10"},
+				"C": {"true"},
+				"D": {"0", "1", "5"},
+				"E": {"10"},
+			},
+			res: Inner{10, true, []int{0, 1, 5}, 10},
+		},
+		{
+			desc:   "optional",
+			parser: New(Optional),
+			args:   url.Values{},
+		},
+		{
+			desc:   "lower case",
+			parser: New(LowerCase),
+			args: url.Values{
+				"b": {"10"},
+				"c": {"true"},
+				"d": {"0", "1", "5"},
+				"e": {"10"},
+			},
+			res: Inner{10, true, []int{0, 1, 5}, 10},
+		},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			var res test
+			err := tC.parser.Parse(tC.args, &res.Inner)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			if !res.cmp(&test{Inner: tC.res}) {
+				t.Error(res, tC.res)
+			}
+		})
+	}
+}

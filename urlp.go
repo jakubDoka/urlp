@@ -17,6 +17,35 @@ var (
 	ErrParseFail    = sterr.New("failed to parse %s into %s when filling field %s")
 )
 
+var p = New()
+
+// Parse calls Parser.Parse on parser with no configuration
+func Parse(values url.Values, value interface{}) (err error) {
+	return p.Parse(values, value)
+}
+
+// Configuration is parser config parameter
+type Configuration int
+
+// LowerCase allows fields to be read as lower case so value under "name" will be assigned to Name struct field
+const LowerCase Configuration = 0
+
+// Optional makes parser consider all fields of struct optional so you don't have to write tags everywhere
+const Optional Configuration = 1
+
+// Parser holds configuration for parsing
+type Parser map[Configuration]bool
+
+// New creates new parser with given configuration
+func New(cfg ...Configuration) Parser {
+	p := Parser{}
+	for _, c := range cfg {
+		p[c] = true
+	}
+
+	return p
+}
+
 // Parse takes an url.Values and struct that is fed with them, you can use
 // "optional" tag to make struct field optional or "something" to use custom name,
 // you can nest struct but all fields will be considered at same level so:
@@ -36,7 +65,7 @@ var (
 //
 // `urlp:"name,optional"` will assing value under "name" key to tagged field and will not raise a
 // error if field is missing
-func Parse(values url.Values, value interface{}) (err error) {
+func (p Parser) Parse(values url.Values, value interface{}) (err error) {
 	ptr := reflect.ValueOf(value)
 	if ptr.Kind() != reflect.Ptr {
 		return ErrNotPtr.Args(ptr.Kind())
@@ -48,6 +77,11 @@ func Parse(values url.Values, value interface{}) (err error) {
 		f := field{
 			StructField: t.Field(i),
 			Value:       v.Field(i),
+			optional:    p[Optional],
+		}
+
+		if p[LowerCase] {
+			f.Name = strings.ToLower(f.Name)
 		}
 
 		if !f.CanSet() {
@@ -55,7 +89,7 @@ func Parse(values url.Values, value interface{}) (err error) {
 		}
 
 		if f.CanAddr() && f.Kind() == reflect.Struct {
-			err = Parse(values, f.Value.Addr().Interface())
+			err = p.Parse(values, f.Value.Addr().Interface())
 			if err != nil {
 				return
 			}
