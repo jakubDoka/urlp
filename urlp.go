@@ -176,7 +176,7 @@ func setAny(val, name string, optional bool, t reflect.Type, f reflect.Value) (e
 	}
 
 	if val == "" {
-		if optional {
+		if !optional {
 			return e
 		}
 		return
