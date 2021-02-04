@@ -11,6 +11,7 @@ import (
 type Inner struct {
 	B uint
 	C bool
+	D []int
 	E float64
 }
 
@@ -22,12 +23,22 @@ type test struct {
 	H string `urlp:"optional"`
 }
 
+func (t *test) cmp(b *test) bool {
+	for i := range t.D {
+		if t.D[i] != b.D[i] {
+			return false
+		}
+	}
+
+	return t.A == b.A && t.B == b.B && t.C == b.C && t.E == b.E && t.F == b.F && t.G == b.G && t.H == b.H
+}
+
 func TestParse(t *testing.T) {
 	testCases := []struct {
 		desc string
 		args url.Values
 		res  test
-		err  *sterr.Err
+		err  sterr.Err
 	}{
 		{
 			desc: "success",
@@ -35,12 +46,13 @@ func TestParse(t *testing.T) {
 				"A": {"10"},
 				"B": {"10"},
 				"C": {"true"},
+				"D": {"0", "1", "5"},
 				"E": {"10"},
 				"F": {"string"},
 				"g": {"string"},
 				"H": {"string"},
 			},
-			res: test{10, Inner{10, true, 10}, "string", "string", "string"},
+			res: test{10, Inner{10, true, []int{0, 1, 5}, 10}, "string", "string", "string"},
 		},
 		{
 			desc: "success omit",
@@ -48,39 +60,32 @@ func TestParse(t *testing.T) {
 				"A": {"10"},
 				"B": {"10"},
 				"C": {"true"},
+				"D": {"0", "1", "5"},
 				"E": {"10"},
 				"F": {"string"},
 				"g": {"string"},
 			},
-			res: test{10, Inner{10, true, 10}, "string", "string", ""},
+			res: test{10, Inner{10, true, []int{0, 1, 5}, 10}, "string", "string", ""},
 		},
 		{
-			desc: "success",
+			desc: "missing value",
 			args: url.Values{},
 			err:  ErrMissingValue,
 		},
 		{
-			desc: "success",
+			desc: "parse fail",
 			args: url.Values{
 				"A": {"10A"},
-				"B": {"10"},
-				"C": {"true"},
-				"E": {"10"},
-				"F": {"string"},
-				"g": {"string"},
 			},
 			res: test{},
 			err: ErrParseFail,
 		},
 		{
-			desc: "success",
+			desc: "bool parse fail",
 			args: url.Values{
 				"A": {"10"},
 				"B": {"10"},
 				"C": {"trueu"},
-				"E": {"10"},
-				"F": {"string"},
-				"g": {"string"},
 			},
 			res: test{A: 10, Inner: Inner{B: 10}},
 			err: ErrParseFail,
@@ -91,11 +96,11 @@ func TestParse(t *testing.T) {
 		t.Run(tC.desc, func(t *testing.T) {
 			var res test
 			err := Parse(tC.args, &res)
-			if res != tC.res {
+			if !res.cmp(&tC.res) {
 				t.Error(res, tC.res)
 			}
 
-			if tC.err != nil && err != nil && !tC.err.SameSurface(err) {
+			if !tC.err.SameSurface(err) {
 				t.Error(err, "!=", tC.err)
 			}
 		})

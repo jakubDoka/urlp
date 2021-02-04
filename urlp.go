@@ -11,12 +11,10 @@ import (
 
 // errors
 var (
-	ErrNotPtr          = sterr.New("value is not pointer")
-	ErrMissingTagValue = sterr.New("tag(%s) on %s is missing value")
-	ErrMissingValue    = sterr.New("value with name %s is missing and is not optional")
-	ErrInvalidField    = sterr.New("trying to parse %s into %s where type does not match")
-	ErrNotSupported    = sterr.New("Type(%s) is not supported")
-	ErrParseFail       = sterr.New("failed to parse %s to %s to field %s")
+	ErrNotPtr       = sterr.New("value is not a pointer but %s")
+	ErrMissingValue = sterr.New("value with name %s is missing and does not have 'optional' tag")
+	ErrNotSupported = sterr.New("type %s is not supported")
+	ErrParseFail    = sterr.New("failed to parse %s into %s when filling field %s")
 )
 
 // Parse takes an url.Values and struct that is fed with them, you can use
@@ -41,7 +39,7 @@ var (
 func Parse(values url.Values, value interface{}) (err error) {
 	ptr := reflect.ValueOf(value)
 	if ptr.Kind() != reflect.Ptr {
-		return ErrNotPtr
+		return ErrNotPtr.Args(ptr.Kind())
 	}
 
 	v := ptr.Elem()
@@ -59,7 +57,7 @@ func Parse(values url.Values, value interface{}) (err error) {
 		if f.CanAddr() && f.Kind() == reflect.Struct {
 			err = Parse(values, f.Value.Addr().Interface())
 			if err != nil {
-				return err
+				return
 			}
 			continue
 		}
@@ -72,7 +70,7 @@ func Parse(values url.Values, value interface{}) (err error) {
 		}
 	}
 
-	return nil
+	return
 }
 
 type field struct {
@@ -103,20 +101,34 @@ func (f *field) set(values url.Values) (err error) {
 		if !f.optional {
 			return ErrMissingValue.Args(f.Name)
 		}
-		return nil
-	}
-
-	val := vals[0]
-
-	if f.Kind() == reflect.String {
-		f.SetString(val)
 		return
 	}
 
-	e := ErrParseFail.Args(val, f.Kind(), f.Name)
-	switch f.Kind() {
-	default:
-		return ErrNotSupported.Args(f.Kind())
+	if f.Kind() == reflect.Slice {
+		slice := reflect.MakeSlice(f.StructField.Type, len(vals), len(vals))
+		for i, val := range vals {
+			err = setAny(val, f.Name+strconv.Itoa(i), false, f.StructField.Type.Elem(), slice.Index(i))
+			if err != nil {
+				return
+			}
+		}
+		f.Set(slice)
+		return
+	}
+
+	return setAny(vals[0], f.Name, f.optional, f.StructField.Type, f.Value)
+}
+
+func setAny(val, name string, optional bool, t reflect.Type, f reflect.Value) (err error) {
+	var (
+		k = f.Kind()
+		e = ErrParseFail.Args(val, k, name)
+	)
+
+	switch k {
+	case reflect.String:
+		f.SetString(val)
+		return
 	case reflect.Bool:
 		switch val {
 		case "true":
@@ -126,34 +138,43 @@ func (f *field) set(values url.Values) (err error) {
 		default:
 			return e
 		}
+		return
+	}
+
+	if val == "" {
+		if optional {
+			return e
+		}
+		return
+	}
+
+	c := val[0]
+	if c != '-' && (c < '0' || c > '9') {
+		return e
+	}
+
+	switch k {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		var n int64
-		if val != "" {
-			n, err = strconv.ParseInt(val, 10, 64)
-			if err != nil {
-				return e.Wrap(err)
-			}
+		n, err = strconv.ParseInt(val, 10, 64)
+		if err == nil {
+			f.SetInt(n)
 		}
-
-		f.SetInt(n)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		var n uint64
-		if val != "" {
-			n, err = strconv.ParseUint(val, 10, 64)
-			if err != nil {
-				return e.Wrap(err)
-			}
+		n, err = strconv.ParseUint(val, 10, 64)
+		if err == nil {
+			f.SetUint(n)
 		}
-		f.SetUint(n)
 	case reflect.Float32, reflect.Float64:
 		var n float64
-		if val != "" {
-			n, err = strconv.ParseFloat(val, f.StructField.Type.Bits())
-			if err != nil {
-				return e.Wrap(err)
-			}
+		n, err = strconv.ParseFloat(val, t.Bits())
+		if err == nil {
+			f.SetFloat(n)
 		}
-		f.SetFloat(n)
+	default:
+		return ErrNotSupported.Args(f.Kind())
 	}
-	return nil
+
+	return e.Wrap(err)
 }
