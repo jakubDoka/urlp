@@ -1,7 +1,7 @@
 package urlp
 
 import (
-	"net/url"
+	"reflect"
 	"testing"
 
 	"github.com/jakubDoka/sterr"
@@ -23,6 +23,10 @@ type test struct {
 	H int    `urlp:"optional"`
 }
 
+type test2 struct {
+	Inner `urlp:"inner,notinlined"`
+}
+
 func (t *test) cmp(b *test) bool {
 	for i := range t.D {
 		if t.D[i] != b.D[i] {
@@ -36,13 +40,13 @@ func (t *test) cmp(b *test) bool {
 func TestParse(t *testing.T) {
 	testCases := []struct {
 		desc string
-		args url.Values
+		args values
 		res  test
 		err  sterr.Err
 	}{
 		{
 			desc: "success",
-			args: url.Values{
+			args: values{
 				"A": {"10"},
 				"B": {"10"},
 				"C": {"true"},
@@ -56,7 +60,7 @@ func TestParse(t *testing.T) {
 		},
 		{
 			desc: "omit",
-			args: url.Values{
+			args: values{
 				"A": {"10"},
 				"B": {"10"},
 				"C": {"true"},
@@ -69,7 +73,7 @@ func TestParse(t *testing.T) {
 		},
 		{
 			desc: "omit with empty string",
-			args: url.Values{
+			args: values{
 				"A": {"10"},
 				"B": {"10"},
 				"C": {"true"},
@@ -83,12 +87,12 @@ func TestParse(t *testing.T) {
 		},
 		{
 			desc: "missing value",
-			args: url.Values{},
+			args: values{},
 			err:  ErrMissingValue,
 		},
 		{
 			desc: "parse fail",
-			args: url.Values{
+			args: values{
 				"A": {"10A"},
 			},
 			res: test{},
@@ -96,7 +100,7 @@ func TestParse(t *testing.T) {
 		},
 		{
 			desc: "bool parse fail",
-			args: url.Values{
+			args: values{
 				"A": {"10"},
 				"B": {"10"},
 				"C": {"trueu"},
@@ -125,13 +129,13 @@ func TestConfiguration(t *testing.T) {
 	testCases := []struct {
 		desc   string
 		parser Parser
-		args   url.Values
+		args   values
 		res    Inner
 	}{
 		{
 			desc:   "none",
 			parser: New(),
-			args: url.Values{
+			args: values{
 				"B": {"10"},
 				"C": {"true"},
 				"D": {"0", "1", "5"},
@@ -142,12 +146,12 @@ func TestConfiguration(t *testing.T) {
 		{
 			desc:   "optional",
 			parser: New(Optional),
-			args:   url.Values{},
+			args:   values{},
 		},
 		{
 			desc:   "lower case",
 			parser: New(LowerCase),
-			args: url.Values{
+			args: values{
 				"b": {"10"},
 				"c": {"true"},
 				"d": {"0", "1", "5"},
@@ -169,5 +173,27 @@ func TestConfiguration(t *testing.T) {
 				t.Error(res, tC.res)
 			}
 		})
+	}
+}
+
+func TestNotInlined(t *testing.T) {
+	url := values{
+		"inner.B": {"10"},
+		"inner.C": {"true"},
+		"inner.D": {"10", "20", "30"},
+		"inner.E": {"10.3"},
+	}
+
+	res := test2{Inner{10, true, []int{10, 20, 30}, 10.3}}
+
+	var r test2
+	err := Parse(url, &r)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if !reflect.DeepEqual(res, r) {
+		t.Error(r)
 	}
 }

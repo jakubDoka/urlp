@@ -1,7 +1,6 @@
 package urlp
 
 import (
-	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -9,18 +8,20 @@ import (
 	"github.com/jakubDoka/sterr"
 )
 
+type values = map[string][]string
+
 // errors
 var (
 	ErrNotPtr       = sterr.New("value is not a pointer but %s")
 	ErrMissingValue = sterr.New("value with name %s is missing and does not have 'optional' tag")
 	ErrNotSupported = sterr.New("type %s is not supported")
-	ErrParseFail    = sterr.New("failed to parse %s into %s when filling field %s")
+	ErrParseFail    = sterr.New("failed to parse '%s' into %s when filling field %s")
 )
 
 var p = New()
 
 // Parse calls Parser.Parse on parser with no configuration
-func Parse(values url.Values, value interface{}) (err error) {
+func Parse(values values, value interface{}) (err error) {
 	return p.Parse(values, value)
 }
 
@@ -32,6 +33,9 @@ const LowerCase Configuration = 0
 
 // Optional makes parser consider all fields of struct optional so you don't have to write tags everywhere
 const Optional Configuration = 1
+
+// NotInlined makes all fieeld not inlined ba default
+const NotInlined Configuration = 2
 
 // Parser holds configuration for parsing
 type Parser map[Configuration]bool
@@ -65,7 +69,17 @@ func New(cfg ...Configuration) Parser {
 //
 // `urlp:"name,optional"` will assing value under "name" key to tagged field and will not raise a
 // error if field is missing
-func (p Parser) Parse(values url.Values, value interface{}) (err error) {
+func (p Parser) Parse(values values, value interface{}) (err error) {
+	return p.CustomParse(values, value, "", "urlp")
+}
+
+// CustomParse is recursive parsing method that is called by Parse as:
+//
+// 	p.CustomParse(values, value, "", "urlp")
+//
+// this should not be important to you unless you need custom tag name, prefix is only umportant for recursion
+// and should alway be passed as empty string
+func (p Parser) CustomParse(values values, value interface{}, prefix, tagname string) (err error) {
 	ptr := reflect.ValueOf(value)
 	if ptr.Kind() != reflect.Ptr {
 		return ErrNotPtr.Args(ptr.Kind())
@@ -88,17 +102,24 @@ func (p Parser) Parse(values url.Values, value interface{}) (err error) {
 			continue
 		}
 
+		f.init(tagname)
+
 		if f.CanAddr() && f.Kind() == reflect.Struct {
-			err = p.Parse(values, f.Value.Addr().Interface())
+			con := ""
+			if prefix != "" {
+				con = "."
+			}
+			if f.notInlined || p[NotInlined] {
+				prefix = prefix + con + f.Name + "."
+			}
+			err = p.CustomParse(values, f.Value.Addr().Interface(), prefix, tagname)
 			if err != nil {
 				return
 			}
 			continue
 		}
 
-		f.init()
-
-		err = f.set(values)
+		err = f.set(values, prefix)
 		if err != nil {
 			return
 		}
@@ -110,27 +131,30 @@ func (p Parser) Parse(values url.Values, value interface{}) (err error) {
 type field struct {
 	reflect.StructField
 	reflect.Value
-	optional bool
+	optional, notInlined bool
 }
 
-func (f *field) init() {
-	raw, ok := f.Tag.Lookup("urlp")
+func (f *field) init(tagname string) {
+	raw, ok := f.Tag.Lookup(tagname)
 	if !ok {
 		return
 	}
 
 	tags := strings.Split(raw, ",")
 	for _, t := range tags {
-		if t == "optional" {
+		switch t {
+		case "optional":
 			f.optional = true
-		} else {
+		case "notinlined":
+			f.notInlined = true
+		default:
 			f.Name = t
 		}
 	}
 }
 
-func (f *field) set(values url.Values) (err error) {
-	vals, ok := values[f.Name]
+func (f *field) set(values values, prefix string) (err error) {
+	vals, ok := values[prefix+f.Name]
 	if !ok || len(vals) == 0 {
 		if !f.optional {
 			return ErrMissingValue.Args(f.Name)
