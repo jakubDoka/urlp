@@ -37,6 +37,9 @@ const Optional Configuration = 1
 // NotInlined makes all fieeld not inlined ba default
 const NotInlined Configuration = 2
 
+// IgnoreNoTag makes all fields that does not have urlp tag ignored
+const IgnoreNoTag Configuration = 3
+
 // Parser holds configuration for parsing
 type Parser map[Configuration]bool
 
@@ -104,6 +107,10 @@ func (p Parser) CustomParse(values values, value interface{}, prefix, tagname st
 
 		f.init(tagname)
 
+		if !f.hasTag && p[IgnoreNoTag] {
+			continue
+		}
+
 		if f.CanAddr() && f.Kind() == reflect.Struct {
 			con := ""
 			if prefix != "" {
@@ -131,7 +138,7 @@ func (p Parser) CustomParse(values values, value interface{}, prefix, tagname st
 type field struct {
 	reflect.StructField
 	reflect.Value
-	optional, notInlined bool
+	optional, notInlined, hasTag bool
 }
 
 func (f *field) init(tagname string) {
@@ -139,6 +146,8 @@ func (f *field) init(tagname string) {
 	if !ok {
 		return
 	}
+
+	f.hasTag = true
 
 	tags := strings.Split(raw, ",")
 	for _, t := range tags {
