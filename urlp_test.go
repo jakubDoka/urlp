@@ -106,7 +106,7 @@ func TestParse(t *testing.T) {
 				"C": {"trueu"},
 			},
 			res: test{A: 10, Inner: Inner{B: 10}},
-			err: ErrParseFail,
+			err: ErrPath,
 		},
 	}
 
@@ -133,8 +133,7 @@ func TestConfiguration(t *testing.T) {
 		res    Inner
 	}{
 		{
-			desc:   "none",
-			parser: New(),
+			desc: "none",
 			args: values{
 				"B": {"10"},
 				"C": {"true"},
@@ -145,12 +144,12 @@ func TestConfiguration(t *testing.T) {
 		},
 		{
 			desc:   "optional",
-			parser: New(Optional),
+			parser: Parser{Optional: true},
 			args:   values{},
 		},
 		{
 			desc:   "lower case",
-			parser: New(LowerCase),
+			parser: Parser{LowerCase: true},
 			args: values{
 				"b": {"10"},
 				"c": {"true"},
@@ -195,5 +194,27 @@ func TestNotInlined(t *testing.T) {
 
 	if !reflect.DeepEqual(res, r) {
 		t.Error(r)
+	}
+}
+
+func TestNoTag(t *testing.T) {
+	type test struct {
+		A int
+		B int `urlp:"!"`
+	}
+
+	val := values{
+		"A": {"10"},
+		"B": {"10"},
+	}
+
+	var e test
+	p := Parser{
+		IgnoreNotMarked: true,
+	}
+	p.Parse(val, &e)
+
+	if e != (test{0, 10}) {
+		t.Error(e)
 	}
 }

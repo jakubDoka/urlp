@@ -15,63 +15,37 @@ var (
 	ErrNotPtr       = sterr.New("value is not a pointer but %s")
 	ErrMissingValue = sterr.New("value with name %s is missing and does not have 'optional' tag")
 	ErrNotSupported = sterr.New("type %s is not supported")
+	ErrPath         = sterr.New("under field %s")
 	ErrParseFail    = sterr.New("failed to parse '%s' into %s when filling field %s")
 )
 
-var p = New()
+var p Parser
 
 // Parse calls Parser.Parse on parser with no configuration
 func Parse(values values, value interface{}) (err error) {
 	return p.Parse(values, value)
 }
 
-// Configuration is parser config parameter
-type Configuration int
-
-// LowerCase allows fields to be read as lower case so value under "name" will be assigned to Name struct field
-const LowerCase Configuration = 0
-
-// Optional makes parser consider all fields of struct optional so you don't have to write tags everywhere
-const Optional Configuration = 1
-
-// NotInlined makes all fieeld not inlined ba default
-const NotInlined Configuration = 2
-
-// IgnoreNoTag makes all fields that does not have urlp tag ignored
-const IgnoreNoTag Configuration = 3
-
-// Parser holds configuration for parsing
-type Parser map[Configuration]bool
-
-// New creates new parser with given configuration
-func New(cfg ...Configuration) Parser {
-	p := Parser{}
-	for _, c := range cfg {
-		p[c] = true
-	}
-
-	return p
+// Parser holds configuration for parsing, configurations si way to apply structtag on all fields of parsed struct
+type Parser struct {
+	// LowerCase allows fields to be read as lower case so value under "name" will be assigned to Name struct field
+	LowerCase bool
+	// Optional makes parser consider all fields of struct optional so you don't have to write tags everywhere
+	Optional bool
+	// NotInlined makes all fieeld not inlined ba default
+	NotInlined bool
+	// IgnoreNotMarked inverts the '!' effect
+	IgnoreNotMarked bool
 }
 
-// Parse takes an url.Values and struct that is fed with them, you can use
-// "optional" tag to make struct field optional or "something" to use custom name,
-// you can nest struct but all fields will be considered at same level so:
+// Parse takes an map[string][]string and struct that is fed with values, you can use
+// a various tags to affect feeding
 //
-//	type foo {
-//		A, B, C int
-//	}
+// 	'optional' - value of a field can be missing in values, no error will be raised
+// 	'notinlined' - makes fields of nested struct accessable with dot syntax (struct.field)
+// 	'!' - makes field ignored absolutely, even if value with given name of field is present
 //
-// acts same as:
-//
-//	type bar {
-//		A int
-//		B struct {
-//			B, C int
-//		}
-//	}
-//
-// `urlp:"name,optional"` will assing value under "name" key to tagged field and will not raise a
-// error if field is missing
+// anything else will make field mapped to that name
 func (p Parser) Parse(values values, value interface{}) (err error) {
 	return p.CustomParse(values, value, "", "urlp")
 }
@@ -94,10 +68,10 @@ func (p Parser) CustomParse(values values, value interface{}, prefix, tagname st
 		f := field{
 			StructField: t.Field(i),
 			Value:       v.Field(i),
-			optional:    p[Optional],
+			optional:    p.Optional,
 		}
 
-		if p[LowerCase] {
+		if p.LowerCase {
 			f.Name = strings.ToLower(f.Name)
 		}
 
@@ -107,7 +81,7 @@ func (p Parser) CustomParse(values values, value interface{}, prefix, tagname st
 
 		f.init(tagname)
 
-		if !f.hasTag && p[IgnoreNoTag] {
+		if (!f.marked && p.IgnoreNotMarked) || (f.marked && !p.IgnoreNotMarked) {
 			continue
 		}
 
@@ -116,11 +90,12 @@ func (p Parser) CustomParse(values values, value interface{}, prefix, tagname st
 			if prefix != "" {
 				con = "."
 			}
-			if f.notInlined || p[NotInlined] {
+			if f.notInlined || p.NotInlined {
 				prefix = prefix + con + f.Name + "."
 			}
 			err = p.CustomParse(values, f.Value.Addr().Interface(), prefix, tagname)
 			if err != nil {
+				err = ErrPath.Args(f.Name).Wrap(err)
 				return
 			}
 			continue
@@ -138,7 +113,7 @@ func (p Parser) CustomParse(values values, value interface{}, prefix, tagname st
 type field struct {
 	reflect.StructField
 	reflect.Value
-	optional, notInlined, hasTag bool
+	optional, notInlined, marked bool
 }
 
 func (f *field) init(tagname string) {
@@ -147,8 +122,6 @@ func (f *field) init(tagname string) {
 		return
 	}
 
-	f.hasTag = true
-
 	tags := strings.Split(raw, ",")
 	for _, t := range tags {
 		switch t {
@@ -156,6 +129,8 @@ func (f *field) init(tagname string) {
 			f.optional = true
 		case "notinlined":
 			f.notInlined = true
+		case "!":
+			f.marked = true
 		default:
 			f.Name = t
 		}
